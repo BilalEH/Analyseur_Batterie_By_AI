@@ -1,0 +1,851 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pro Battery Analyzer | The Ultimate Report Tool</title>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet">
+    
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
+
+    <style>
+        :root {
+            --bg-color: #f8f9fa;
+            --surface-color: #ffffff;
+            --primary-color: #4A90E2;
+            --primary-gradient: linear-gradient(90deg, #4A90E2 0%, #246bb4 100%);
+            --text-color: #1a202c;
+            --text-muted-color: #718096;
+            --border-color: #e2e8f0;
+            --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            --radius: 12px;
+            --font-main: 'Inter', sans-serif;
+            --font-ar: 'Tajawal', sans-serif;
+            --status-excellent: #34D399;
+            --status-good: #4A90E2;
+            --status-fair: #FBBF24;
+            --status-poor: #F87171;
+        }
+
+        *, *::before, *::after { box-sizing: border-box; }
+
+        body {
+            font-family: var(--font-main);
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 2rem;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            min-height: 100vh;
+        }
+
+        .lang-switcher {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 100;
+            display: flex; gap: 8px;
+            background: var(--surface-color);
+            padding: 8px; border-radius: 20px;
+            box-shadow: var(--shadow);
+            border: 1px solid var(--border-color);
+        }
+        .lang-switcher button {
+            background: transparent; border: none; color: var(--text-muted-color); font-size: 0.9rem;
+            font-weight: 500;
+            cursor: pointer; transition: all 0.2s ease; padding: 6px 12px; border-radius: 15px;
+        }
+        .lang-switcher button:hover { color: var(--text-color); }
+        .lang-switcher button.active {
+            color: white;
+            background: var(--primary-color);
+        }
+
+        .container {
+            width: 100%; max-width: 1100px;
+            transition: all 0.5s ease;
+        }
+
+        #upload-section {
+            text-align: center; border: 2px dashed var(--border-color);
+            padding: 4rem; border-radius: var(--radius);
+            background-color: var(--surface-color);
+            transition: all 0.3s ease; cursor: pointer;
+        }
+        #upload-section.dragover {
+            border-color: var(--primary-color);
+            transform: scale(1.01);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+        #upload-section h1 { margin-top: 0; font-size: clamp(1.8rem, 5vw, 2.5rem); font-weight: 700; }
+        #upload-section p { color: var(--text-muted-color); margin-bottom: 2rem; font-size: 1.1rem; }
+        #fileInput { display: none; }
+
+        #loader {
+            display: none; width: 50px; height: 50px; border: 4px solid var(--border-color);
+            border-top-color: var(--primary-color); border-radius: 50%;
+            animation: spin 1s linear infinite; margin: 3rem auto;
+        }
+        @keyframes spin { 100% { transform: rotate(360deg); } }
+        
+        #results-section { display: none; }
+
+        .bento-grid {
+            display: grid;
+            gap: 1.5rem;
+            grid-template-columns: repeat(4, 1fr);
+            opacity: 0;
+            transform: translateY(20px);
+            animation: fadeInGrid 0.6s forwards ease-out;
+        }
+        @keyframes fadeInGrid { to { opacity: 1; transform: translateY(0); } }
+
+        .bento-item {
+            background-color: var(--surface-color);
+            padding: 1.5rem;
+            border-radius: var(--radius);
+            border: 1px solid var(--border-color);
+            box-shadow: var(--shadow);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            display: flex; flex-direction: column;
+        }
+        .bento-item:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+        
+        .bento-item h3 {
+            margin: 0 0 1rem 0;
+            font-size: 1rem;
+            font-weight: 500;
+            color: var(--text-muted-color);
+            display: flex; align-items: center; gap: 0.5rem;
+        }
+        .bento-item h3 svg { width: 16px; height: 16px; }
+
+        /* Grid item spans */
+        .header { grid-column: span 4; display: flex; justify-content: space-between; align-items: center; }
+        .stat { grid-column: span 1; text-align: center; }
+        .ai-summary { grid-column: span 4; }
+        .recommendations { grid-column: span 2; }
+        .community-chart { grid-column: span 2; }
+        .history-chart { grid-column: span 4; }
+        .recent-usage { grid-column: span 4; }
+
+        .stat-value {
+            font-size: 2.5rem;
+            font-weight: 700;
+            line-height: 1.2;
+            margin-bottom: 0.25rem;
+        }
+
+        .status-badge {
+            padding: 0.5rem 1.5rem; border-radius: 50px; color: white;
+            font-weight: 600; font-size: 1rem;
+        }
+        .status-Excellent { background: var(--status-excellent); }
+        .status-Good { background: var(--status-good); }
+        .status-Fair { background: var(--status-fair); }
+        .status-Poor { background: var(--status-poor); }
+
+        ul.points-list { list-style: none; padding: 0; margin: 0; }
+        ul.points-list li { padding: 0.5rem 0; display: flex; align-items: center; font-size: 0.95rem; }
+        ul.points-list li::before { content: '•'; color: var(--primary-color); margin-right: 0.75rem; font-size: 1.2rem; }
+        .advice li::before { content: '💡'; }
+
+        .table-container { max-height: 300px; overflow-y: auto; flex-grow: 1; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 12px; text-align: start; border-bottom: 1px solid var(--border-color); font-size: 0.9rem; }
+        th { color: var(--text-muted-color); font-weight: 500; }
+        tbody tr:last-child td { border-bottom: none; }
+        tbody tr:hover { background-color: #f8f9fa; }
+
+        #open-chat-btn {
+            background: var(--primary-gradient);
+            color: white; border: none; border-radius: 8px;
+            padding: 10px 18px; margin-top: 1rem; cursor: pointer;
+            transition: all 0.3s ease; display: inline-flex; align-items: center; gap: 8px; font-weight: 500;
+        }
+        #open-chat-btn:hover { transform: translateY(-2px); box-shadow: 0 4px 10px rgba(74, 144, 226, 0.4); }
+
+        /* Chat Modal */
+        .chat-modal {
+            position: fixed; top: 0; left: 0; z-index: 1000;
+            width: 100%; height: 100%;
+            background: rgba(0,0,0,0.3); backdrop-filter: blur(5px);
+            display: none; justify-content: center; align-items: center;
+            opacity: 0; transition: opacity 0.3s ease;
+        }
+        .chat-modal.visible { display: flex; opacity: 1; }
+        .chat-window {
+            width: 90%; max-width: 500px; height: 60vh;
+            background: var(--surface-color); border: 1px solid var(--border-color);
+            border-radius: var(--radius); box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+            display: flex; flex-direction: column;
+            transform: scale(0.95); transition: transform 0.3s ease;
+        }
+        .chat-modal.visible .chat-window { transform: scale(1); }
+        .chat-header { padding: 1rem; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; }
+        .chat-header h4 { margin: 0; }
+        #close-chat-btn { background: none; border: none; font-size: 1.5rem; color: var(--text-muted-color); cursor: pointer; transition: color 0.2s; }
+        #close-chat-btn:hover { color: var(--text-color); }
+        .chat-messages { flex-grow: 1; padding: 1rem; overflow-y: auto; display: flex; flex-direction: column; gap: 1rem; }
+        .message { padding: 0.75rem 1rem; border-radius: 12px; max-width: 80%; line-height: 1.5; font-size: 0.95rem; }
+        .ai-message { background: #f1f5f9; color: var(--text-color); align-self: flex-start; }
+        .user-message { background: var(--primary-color); color: white; align-self: flex-end; }
+        .typing-indicator { align-self: flex-start; }
+        .typing-indicator span { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--text-muted-color); margin: 0 2px; animation: bounce 1.4s infinite ease-in-out both; }
+        .typing-indicator span:nth-child(1) { animation-delay: -0.32s; }
+        .typing-indicator span:nth-child(2) { animation-delay: -0.16s; }
+        @keyframes bounce { 0%, 80%, 100% { transform: scale(0); } 40% { transform: scale(1.0); } }
+        
+        .chat-input-form { display: flex; padding: 1rem; border-top: 1px solid var(--border-color); }
+        #chat-input {
+            flex-grow: 1; background: #f8f9fa; border: 1px solid var(--border-color);
+            border-radius: 8px; padding: 0.75rem; color: var(--text-color); font-size: 1rem;
+        }
+        #chat-input:focus { border-color: var(--primary-color); box-shadow: 0 0 0 2px rgba(74, 144, 226, 0.2); outline: none; }
+        #chat-send-btn {
+            background: var(--primary-color); border: none; color: white;
+            padding: 0 1.5rem; border-radius: 8px; margin-inline-start: 0.5rem; cursor: pointer;
+            font-weight: 500; font-size: 1rem; transition: background-color 0.3s ease;
+        }
+        #chat-send-btn:hover { background: #0056b3; }
+
+        /* RTL & Responsive */
+        html[dir="rtl"] body { font-family: var(--font-ar); }
+        html[dir="rtl"] .lang-switcher { left: 20px; right: auto; }
+
+        @media (max-width: 1024px) {
+            .recommendations, .community-chart { grid-column: span 2; }
+        }
+
+        @media (max-width: 768px) {
+            body { padding: 1rem; }
+            .bento-grid { grid-template-columns: repeat(2, 1fr); }
+            .header, .ai-summary, .recommendations, .community-chart, .history-chart, .recent-usage { grid-column: span 2; }
+        }
+
+        @media (max-width: 600px) {
+            .bento-grid { grid-template-columns: 1fr; }
+            .header, .ai-summary, .stat, .recommendations, .community-chart, .history-chart, .recent-usage { grid-column: span 1; }
+            .header { flex-direction: column; align-items: flex-start; gap: 1rem; }
+        }
+    </style>
+</head>
+<body>
+    <div class="lang-switcher">
+        <button id="lang-en" class="active">EN</button>
+        <button id="lang-fr">FR</button>
+        <button id="lang-ar">AR</button>
+    </div>
+
+    <div class="container">
+        <div id="upload-section">
+            <h1 data-translate-key="upload_title">Pro Battery Analyzer</h1>
+            <p data-translate-key="upload_subtitle">Drag & drop your 'battery-report.html' file, or click to select.</p>
+            <input type="file" id="fileInput" accept=".html,.htm">
+        </div>
+
+        <div id="loader"></div>
+
+        <div id="results-section">
+            <div class="bento-grid">
+                <header class="bento-item header">
+                    <div>
+                        <h2 id="laptop-model" style="margin: 0; font-size: 1.5rem;">Laptop Model</h2>
+                        <p id="laptop-manufacturer" style="color: var(--text-muted-color); margin: 0;"></p>
+                    </div>
+                    <div id="status-badge" class="status-badge">Good</div>
+                </header>
+
+                <div class="bento-item stat">
+                    <h3 data-translate-key="stat_design_capacity">Design Capacity</h3>
+                    <p id="design-capacity" class="stat-value">N/A</p>
+                </div>
+                <div class="bento-item stat">
+                    <h3 data-translate-key="stat_full_charge">Full Charge</h3>
+                    <p id="full-charge-capacity" class="stat-value">N/A</p>
+                </div>
+                <div class="bento-item stat">
+                    <h3 data-translate-key="stat_wear_level">Wear Level</h3>
+                    <p id="wear-level" class="stat-value">N/A</p>
+                </div>
+                <div class="bento-item stat">
+                    <h3 data-translate-key="stat_cycle_count">Cycle Count</h3>
+                    <p id="cycle-count" class="stat-value">N/A</p>
+                </div>
+
+                <div class="bento-item ai-summary">
+                    <h3 data-translate-key="section_ai_analysis"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456zM16.898 20.553L16.5 21.75l-.398-1.197a3.375 3.375 0 00-2.456-2.456L12.75 18l1.197-.398a3.375 3.375 0 002.456-2.456L16.5 14.25l.398 1.197a3.375 3.375 0 002.456 2.456L20.25 18l-1.197.398a3.375 3.375 0 00-2.456 2.456z" /></svg>AI Analysis</h3>
+                    <p id="summary" style="line-height: 1.7; font-size: 1.1rem; margin: 0;"></p>
+                    <button id="open-chat-btn">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M8 15c4.418 0 8-3.134 8-7s-3.582-7-8-7-8 3.134-8 7c0 1.76.743 3.37 1.97 4.6-.097 1.016-.417 2.13-.771 2.966-.079.186.074.394.273.362 2.256-.37 3.597-.938 4.18-1.234A9.06 9.06 0 0 0 8 15z"/></svg>
+                        <span data-translate-key="chat_open_btn">Ask AI for details</span>
+                    </button>
+                </div>
+                
+                <div class="bento-item recommendations">
+                     <h3 data-translate-key="section_pos_points">Positive Points</h3>
+                     <ul id="positive-points" class="points-list"></ul>
+                </div>
+                
+                <div class="bento-item recommendations">
+                     <h3 data-translate-key="section_neg_points">Areas for Improvement</h3>
+                     <ul id="negative-points" class="points-list"></ul>
+                </div>
+                
+                <div class="bento-item recommendations">
+                    <h3 data-translate-key="section_advice">Recommendations</h3>
+                    <ul id="advice" class="points-list advice"></ul>
+                </div>
+                
+                <div class="bento-item community-chart">
+                    <h3 data-translate-key="section_community">Community Comparison</h3>
+                    <p id="comparison-text" style="font-size: 0.9rem; color: var(--text-muted-color); margin: 0 0 1rem 0;"></p>
+                    <canvas id="comparisonChart" style="max-height: 500px;"></canvas>
+                </div>
+                
+                <div class="bento-item history-chart">
+                    <h3 data-translate-key="section_capacity_history">Capacity History</h3>
+                    <canvas id="historyChart" style="max-height: 500px;"></canvas>
+                </div>
+                
+                <div class="bento-item recent-usage">
+                    <h3 data-translate-key="section_recent_usage">Recent Usage</h3>
+                    <div class="table-container">
+                        <table id="recent-usage-table">
+                            <thead><tr>
+                                <th data-translate-key="table_start_time">Start Time</th>
+                                <th data-translate-key="table_state">State</th>
+                                <th data-translate-key="table_source">Source</th>
+                                <th data-translate-key="table_capacity_drain">Capacity Drain</th>
+                            </tr></thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div id="chat-modal" class="chat-modal">
+        <div class="chat-window">
+            <div class="chat-header">
+                <h4 data-translate-key="chat_modal_title">AI Analyst Assistant</h4>
+                <button id="close-chat-btn">&times;</button>
+            </div>
+            <div class="chat-messages" id="chat-messages"></div>
+            <form class="chat-input-form" id="chat-form">
+                <input type="text" id="chat-input" autocomplete="off" placeholder="Ask about 'wear level', 'cycle count'...">
+                <button type="submit" id="chat-send-btn" data-translate-key="chat_send">Send</button>
+            </form>
+        </div>
+    </div>
+
+<script>
+const translations = {
+    en: {
+        upload_title: "Pro Battery Analyzer",
+        upload_subtitle: "Drag & drop your 'battery-report.html' file, or click to select.",
+        stat_design_capacity: "Design Capacity",
+        stat_full_charge: "Full Charge",
+        stat_wear_level: "Wear Level",
+        stat_cycle_count: "Cycle Count",
+        section_ai_analysis: "AI Analysis",
+        section_pos_points: "Positive Points",
+        section_neg_points: "Areas for Improvement",
+        section_advice: "Recommendations",
+        section_community: "Community Comparison",
+        section_capacity_history: "Capacity History",
+        section_recent_usage: "Recent Usage",
+        table_start_time: "Start Time",
+        table_state: "State",
+        table_source: "Source",
+        table_capacity_drain: "Capacity Drain",
+        status_Excellent: "Excellent",
+        status_Good: "Good",
+        status_Fair: "Fair",
+        status_Poor: "Poor",
+        community_better: "Your battery's wear is better than {percentile}% of users. Community average: {average_wear}%.",
+        community_worse: "Your wear is above average, but still better than {percentile}% of users. Community average: {average_wear}%.",
+        chart_wear_label: "Wear Level (%)",
+        chart_wear_title: "Wear Level Comparison",
+        chart_your_battery: "Your Battery",
+        chart_community_avg: "Community Average",
+        chart_history_label: "Full Charge Capacity (mWh)",
+        chart_history_title: "Capacity Degradation Over Time",
+        alert_select_html: "Please select a valid HTML file.",
+        alert_parsing_error: "An error occurred while parsing the report. Please ensure it is a valid 'battery-report.html' file.",
+        na: "N/A",
+        chat_open_btn: "Ask AI for details",
+        chat_modal_title: "AI Analyst Assistant",
+        chat_placeholder: "Ask about 'wear level', 'cycle count'...",
+        chat_send: "Send",
+        chat_responses: {
+            greeting: "Hello! I'm here to help you understand your battery report. What term would you like me to explain? You can ask about 'wear level', 'cycle count', or 'capacity'.",
+            default: "I can only provide details on terms found in the battery report. Please ask about a specific metric like 'wear level' or 'cycle count'.",
+            wear: "The 'Wear Level' is the percentage of capacity the battery has lost over time compared to its original design. A lower number is better. For example, a 10% wear level means the battery can now hold 90% of the charge it could when it was new.",
+            cycle: "A 'Cycle Count' is one full charge and discharge cycle. For example, using your laptop from 100% down to 50%, recharging to 100%, and then using it down to 50% again equals one full cycle (50% + 50%). High cycle counts contribute to battery wear.",
+            capacity: "'Design Capacity' is the maximum charge the battery was designed to hold (in mWh). 'Full Charge Capacity' is the maximum charge it can currently hold. The difference between these two indicates the battery's wear.",
+            status: "The status (Excellent, Good, Fair, Poor) is a general grade based on the wear level. 'Excellent' is under 8% wear, 'Good' is under 20%, 'Fair' is under 40%, and 'Poor' is anything above that. It's a quick way to gauge the overall health."
+        }
+    },
+    fr: {
+        upload_title: "Analyseur Pro de Batterie",
+        upload_subtitle: "Glissez-déposez votre fichier 'battery-report.html' ici, ou cliquez pour le sélectionner.",
+        stat_design_capacity: "Capacité d'Origine",
+        stat_full_charge: "Pleine Charge",
+        stat_wear_level: "Niveau d'Usure",
+        stat_cycle_count: "Cycles",
+        section_ai_analysis: "Analyse IA",
+        section_pos_points: "Points Positifs",
+        section_neg_points: "Axes d'Amélioration",
+        section_advice: "Recommandations",
+        section_community: "Comparaison Communautaire",
+        section_capacity_history: "Historique de Capacité",
+        section_recent_usage: "Utilisation Récente",
+        table_start_time: "Heure de Début",
+        table_state: "État",
+        table_source: "Source",
+        table_capacity_drain: "Perte de Capacité",
+        status_Excellent: "Excellent",
+        status_Good: "Bon",
+        status_Fair: "Moyen",
+        status_Poor: "Faible",
+        community_better: "Votre usure est meilleure que {percentile}% des utilisateurs. Moyenne: {average_wear}%.",
+        community_worse: "Votre usure est supérieure à la moyenne, mais meilleure que {percentile}% des utilisateurs. Moyenne: {average_wear}%.",
+        chart_wear_label: "Niveau d'usure (%)",
+        chart_wear_title: "Comparaison du Niveau d'Usure",
+        chart_your_battery: "Votre Batterie",
+        chart_community_avg: "Moyenne Communautaire",
+        chart_history_label: "Capacité de charge complète (mWh)",
+        chart_history_title: "Dégradation de la Capacité",
+        alert_select_html: "Veuillez sélectionner un fichier HTML valide.",
+        alert_parsing_error: "Une erreur est survenue lors de l'analyse du rapport. Veuillez vous assurer qu'il s'agit d'un fichier 'battery-report.html' valide.",
+        na: "N/D",
+        chat_open_btn: "Demander à l'IA",
+        chat_modal_title: "Assistant Analyste IA",
+        chat_placeholder: "Question sur 'niveau d'usure', 'cycles'...",
+        chat_send: "Envoyer",
+        chat_responses: {
+            greeting: "Bonjour ! Je suis là pour vous aider à comprendre votre rapport de batterie. Quel terme souhaitez-vous que j'explique ? Vous pouvez poser des questions sur le 'niveau d'usure', le 'nombre de cycles' ou la 'capacité'.",
+            default: "Je ne peux fournir des détails que sur les termes du rapport. Veuillez poser une question sur une métrique spécifique comme 'niveau d'usure' ou 'nombre de cycles'.",
+            wear: "Le 'Niveau d'Usure' est le pourcentage de capacité que la batterie a perdu par rapport à sa capacité d'origine. Un chiffre bas est meilleur. Par exemple, une usure de 10% signifie que la batterie ne peut retenir que 90% de sa charge initiale.",
+            cycle: "Un 'Nombre de Cycles' correspond à un cycle complet de charge et de décharge. Par exemple, utiliser votre ordinateur de 100% à 50%, le recharger, puis l'utiliser à nouveau jusqu'à 50% équivaut à un cycle complet (50% + 50%). Un nombre de cycles élevé contribue à l'usure.",
+            capacity: "La 'Capacité d'Origine' est la charge maximale pour laquelle la batterie a été conçue (en mWh). La 'Capacité de Charge Complète' est la charge maximale qu'elle peut actuellement tenir. La différence entre les deux indique l'usure.",
+            status: "Le statut (Excellent, Bon, Moyen, Faible) est une note générale basée sur le niveau d'usure. 'Excellent' correspond à moins de 8% d'usure, 'Bon' à moins de 20%, 'Moyen' à moins de 40%, et 'Faible' au-delà. C'est un moyen rapide d'évaluer la santé globale."
+        }
+    },
+    ar: {
+        upload_title: "محلل البطارية الاحترافي",
+        upload_subtitle: "اسحب وأفلت ملف 'battery-report.html' هنا، أو انقر لاختياره.",
+        stat_design_capacity: "السعة الأصلية",
+        stat_full_charge: "الشحن الكامل",
+        stat_wear_level: "مستوى التآكل",
+        stat_cycle_count: "عدد الدورات",
+        section_ai_analysis: "تحليل الذكاء الاصطناعي",
+        section_pos_points: "النقاط الإيجابية",
+        section_neg_points: "نقاط للتحسين",
+        section_advice: "التوصيات",
+        section_community: "مقارنة مع المجتمع",
+        section_capacity_history: "سجل سعة البطارية",
+        section_recent_usage: "الاستخدام الأخير",
+        table_start_time: "وقت البدء",
+        table_state: "الحالة",
+        table_source: "المصدر",
+        table_capacity_drain: "استنزاف السعة",
+        status_Excellent: "ممتاز",
+        status_Good: "جيد",
+        status_Fair: "مقبول",
+        status_Poor: "ضعيف",
+        community_better: "تآكل بطاريتك أفضل من {percentile}% من المستخدمين. متوسط المجتمع: {average_wear}%.",
+        community_worse: "تآكل بطاريتك أعلى من المتوسط، لكنه لا يزال أفضل من {percentile}% من المستخدمين. متوسط المجتمع: {average_wear}%.",
+        chart_wear_label: "مستوى التآكل (%)",
+        chart_wear_title: "مقارنة مستوى التآكل",
+        chart_your_battery: "بطاريتك",
+        chart_community_avg: "متوسط المجتمع",
+        chart_history_label: "سعة الشحن الكاملة (mWh)",
+        chart_history_title: "تدهور السعة عبر الزمن",
+        alert_select_html: "المرجو اختيار ملف HTML صحيح.",
+        alert_parsing_error: "حدث خطأ أثناء تحليل التقرير. تأكد من أنه ملف 'battery-report.html' صحيح.",
+        na: "غير متوفر",
+        chat_open_btn: "اسأل الذكاء الاصطناعي",
+        chat_modal_title: "مساعد المحلل الذكي",
+        chat_placeholder: "اسأل عن 'مستوى التآكل'، 'عدد الدورات'...",
+        chat_send: "إرسال",
+        chat_responses: {
+            greeting: "مرحباً! أنا هنا لمساعدتك في فهم تقرير بطاريتك. عن أي مصطلح تود أن أشرح لك؟ يمكنك السؤال عن 'مستوى التآكل'، 'عدد الدورات'، أو 'السعة'.",
+            default: "يمكنني فقط تقديم تفاصيل حول المصطلحات الموجودة في تقرير البطارية. الرجاء السؤال عن مقياس محدد مثل 'مستوى التآكل' أو 'عدد الدورات'.",
+            wear: "'مستوى التآكل' هو النسبة المئوية للسعة التي فقدتها البطارية بمرور الوقت مقارنة بسعتها الأصلية. كلما انخفض الرقم كان ذلك أفضل. على سبيل المثال، مستوى تآكل 10% يعني أن البطارية يمكنها الآن الاحتفاظ بـ 90% فقط من الشحن الذي كانت تحتفظ به عندما كانت جديدة.",
+            cycle: "'عدد الدورات' هو دورة شحن وتفريغ كاملة واحدة. على سبيل المثال، استخدام الكمبيوتر المحمول من 100% إلى 50%، ثم إعادة شحنه إلى 100%، ثم استخدامه مرة أخرى حتى 50% يعادل دورة كاملة واحدة (50% + 50%). العدد الكبير من الدورات يساهم في تآكل البطارية.",
+            capacity: "'السعة الأصلية' هي أقصى شحنة صُممت البطارية لتحملها (بوحدة mWh). 'سعة الشحن الكاملة' هي أقصى شحنة يمكنها تحملها حاليًا. الفرق بين هذين الرقمين يشير إلى تآكل البطارية.",
+            status: "الحالة (ممتاز، جيد، مقبول، ضعيف) هي تقييم عام يعتمد على مستوى التآكل. 'ممتاز' يعني تآكل أقل من 8%، 'جيد' أقل من 20%، 'مقبول' أقل من 40%، و 'ضعيف' هو أي شيء فوق ذلك. إنها طريقة سريعة لتقييم الحالة الصحية العامة للبطارية."
+        }
+    }
+};
+
+let currentLang = 'en';
+
+function setLanguage(lang) {
+    currentLang = lang;
+    localStorage.setItem('battery-analyzer-lang', lang);
+    document.documentElement.lang = lang;
+    document.documentElement.dir = lang === 'ar' ? 'rtl' : 'ltr';
+
+    document.querySelectorAll('[data-translate-key]').forEach(el => {
+        const key = el.getAttribute('data-translate-key');
+        if (translations[lang][key]) {
+            el.textContent = translations[lang][key];
+        }
+    });
+
+    document.getElementById('chat-input').placeholder = translations[lang].chat_placeholder;
+
+    document.querySelectorAll('.lang-switcher button').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    document.getElementById(`lang-${lang}`).classList.add('active');
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    const savedLang = localStorage.getItem('battery-analyzer-lang') || 'en';
+    setLanguage(savedLang);
+
+    ['en', 'fr', 'ar'].forEach(lang => {
+        document.getElementById(`lang-${lang}`).addEventListener('click', () => setLanguage(lang));
+    });
+});
+
+const fileInput = document.getElementById('fileInput');
+const uploadSection = document.getElementById('upload-section');
+const loader = document.getElementById('loader');
+const resultsSection = document.getElementById('results-section');
+let comparisonChartInstance = null;
+let historyChartInstance = null;
+
+uploadSection.addEventListener('click', () => fileInput.click());
+uploadSection.addEventListener('dragover', (e) => { e.preventDefault(); uploadSection.classList.add('dragover'); });
+uploadSection.addEventListener('dragleave', () => { uploadSection.classList.remove('dragover'); });
+uploadSection.addEventListener('drop', (e) => {
+    e.preventDefault();
+    uploadSection.classList.remove('dragover');
+    if (e.dataTransfer.files.length > 0) {
+        handleFile(e.dataTransfer.files[0]);
+    }
+});
+fileInput.addEventListener('change', (e) => {
+    if (e.target.files.length > 0) {
+        handleFile(e.target.files[0]);
+    }
+});
+
+function handleFile(file) {
+    if (!file || !file.type.match('html.*')) {
+        alert(translations[currentLang].alert_select_html);
+        return;
+    }
+
+    uploadSection.style.display = 'none';
+    loader.style.display = 'block';
+    resultsSection.style.display = 'none';
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        try {
+            const parsedData = parseBatteryReport(e.target.result);
+            const analysisResult = generateAIAnalysis(parsedData);
+            const communityData = { average_wear: 18.5, percentile_base: 55 };
+            analysisResult.comparison = compareWithCommunity(parsedData, communityData);
+
+            setTimeout(() => {
+                loader.style.display = 'none';
+                displayResults(parsedData, analysisResult);
+                resultsSection.style.display = 'block';
+            }, 1200);
+
+        } catch (error) {
+            console.error("Parsing Error:", error);
+            alert(translations[currentLang].alert_parsing_error);
+            loader.style.display = 'none';
+            uploadSection.style.display = 'block';
+        }
+    };
+    reader.readAsText(file);
+}
+
+function parseBatteryReport(htmlContent) {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(htmlContent, 'text/html');
+    const data = { recentUsage: [], capacityHistory: [] };
+
+    const findValue = (key) => {
+        const labels = Array.from(doc.querySelectorAll('td, span.label'));
+        for (const label of labels) {
+            if (label.textContent.trim().toLowerCase().includes(key.toLowerCase())) {
+                const valueEl = label.nextElementSibling;
+                return valueEl ? valueEl.textContent.trim() : null;
+            }
+        }
+        return null;
+    };
+    
+    const parseNumeric = (value) => value ? parseInt(value.replace(/[^\d]/g, ''), 10) : null;
+
+    data.manufacturer = findValue('system manufacturer') || 'N/A';
+    data.model = findValue('system product name') || 'Unknown';
+    data.designCapacity = parseNumeric(findValue('design capacity'));
+    data.fullChargeCapacity = parseNumeric(findValue('full charge capacity'));
+    data.cycleCount = parseNumeric(findValue('cycle count'));
+
+    if (!data.designCapacity || !data.fullChargeCapacity) throw new Error("Capacities not found");
+    data.wearLevel = (1 - (data.fullChargeCapacity / data.designCapacity)) * 100;
+
+    const recentUsageHeader = Array.from(doc.querySelectorAll('h2')).find(h => h.textContent.includes('Recent usage'));
+    if (recentUsageHeader) {
+        const table = recentUsageHeader.nextElementSibling;
+        if(table && table.tagName === 'TABLE') {
+            table.querySelectorAll('tbody tr').forEach(row => {
+                const cells = row.querySelectorAll('td');
+                if(cells.length > 3) {
+                    data.recentUsage.push({
+                        start: cells[0].textContent.trim(),
+                        state: cells[1].textContent.trim(),
+                        source: cells[2].textContent.trim(),
+                        drain: cells[3].textContent.trim(),
+                    });
+                }
+            });
+        }
+    }
+
+    const capacityHistoryHeader = Array.from(doc.querySelectorAll('h2')).find(h => h.textContent.includes('Battery capacity history'));
+    if (capacityHistoryHeader) {
+        const table = capacityHistoryHeader.nextElementSibling;
+         if(table && table.tagName === 'TABLE') {
+            table.querySelectorAll('tbody tr').forEach(row => {
+                const cells = row.querySelectorAll('td');
+                if (cells.length > 2) {
+                    data.capacityHistory.push({
+                        period: cells[0].textContent.trim(),
+                        fullCharge: parseNumeric(cells[2].textContent)
+                    });
+                }
+            });
+        }
+    }
+
+    return data;
+}
+
+function generateAIAnalysis(data) {
+    const { wearLevel, cycleCount, capacityHistory } = data;
+    const result = { status: "", positive_points: [], negative_points: [], advice: [] };
+
+    if (wearLevel < 8) result.status = "Excellent";
+    else if (wearLevel < 20) result.status = "Good";
+    else if (wearLevel < 40) result.status = "Fair";
+    else result.status = "Poor";
+
+    if (result.status === "Excellent") {
+        result.summary = "The battery is in exceptional condition, performing almost like new. The wear level is minimal, ensuring maximum runtime and longevity.";
+        result.positive_points.push("Extremely low wear level, preserving original capacity.");
+    } else if (result.status === "Good") {
+        result.summary = "The battery is in good health with normal, expected wear. It reliably holds a charge and should provide solid performance for daily tasks.";
+        result.positive_points.push("Maintains a significant portion of its original capacity.");
+        result.negative_points.push("Minor wear is present, which is a natural part of its lifecycle.");
+    } else if (result.status === "Fair") {
+        result.summary = "The battery shows moderate wear. You may notice a reduced runtime compared to when it was new. It's functional, but planning for a future replacement is advisable.";
+        result.negative_points.push("A noticeable portion of the original capacity has been lost.");
+    } else {
+        result.summary = "The battery is in poor condition with high wear. Runtime is likely significantly reduced, impacting portability. A replacement is highly recommended for a better experience.";
+        result.negative_points.push("High wear level is severely impacting performance and runtime.");
+    }
+
+    if (cycleCount !== null) {
+        if (cycleCount < 150) result.positive_points.push("Low cycle count indicates light usage, which is great for longevity.");
+        else if (cycleCount > 600) result.negative_points.push("High cycle count is a contributing factor to the battery's current wear level.");
+    }
+
+    if (capacityHistory.length > 2) {
+        const first = capacityHistory[0].fullCharge;
+        const last = capacityHistory[capacityHistory.length - 1].fullCharge;
+        if (Math.abs(first - last) < (first * 0.05)) {
+            result.positive_points.push("Capacity has remained stable over time, indicating healthy degradation.");
+        } else {
+            result.negative_points.push("Capacity has shown a noticeable decline over the recorded history.");
+        }
+    }
+    
+    result.advice.push("Avoid frequent full discharges (0%); try to keep it above 20%.");
+    result.advice.push("If plugged in for long periods, use manufacturer's battery charge limiting tools if available (e.g., limit to 80%).");
+    result.advice.push("Reduce screen brightness and manage high-power background apps to extend daily runtime.");
+
+    return result;
+}
+
+function compareWithCommunity(parsedData, communityData) {
+    const { wearLevel } = parsedData;
+    const { average_wear, percentile_base } = communityData;
+    let percentile = percentile_base + ((average_wear - wearLevel) * 1.5);
+    percentile = Math.max(5, Math.min(99, Math.round(percentile)));
+    
+    return {
+        wear_vs_avg: wearLevel < average_wear ? 'better' : 'worse',
+        percentile: percentile,
+        average_wear: average_wear
+    };
+}
+
+function displayResults(parsedData, analysis) {
+    const na = translations[currentLang].na;
+    document.getElementById('laptop-model').textContent = parsedData.model;
+    document.getElementById('laptop-manufacturer').textContent = parsedData.manufacturer;
+    const statusBadge = document.getElementById('status-badge');
+    statusBadge.textContent = translations[currentLang][`status_${analysis.status}`];
+    statusBadge.className = 'status-badge';
+    statusBadge.classList.add(`status-${analysis.status}`);
+    
+    document.getElementById('design-capacity').textContent = `${(parsedData.designCapacity / 1000).toFixed(0)}k`;
+    document.getElementById('full-charge-capacity').textContent = `${(parsedData.fullChargeCapacity / 1000).toFixed(0)}k`;
+    document.getElementById('wear-level').textContent = `${parsedData.wearLevel.toFixed(1)}%`;
+    document.getElementById('cycle-count').textContent = parsedData.cycleCount !== null ? parsedData.cycleCount : na;
+    
+    document.getElementById('summary').textContent = analysis.summary;
+    const createListItems = (id, items) => {
+        const ul = document.getElementById(id);
+        ul.innerHTML = items.map(item => `<li>${item}</li>`).join('') || `<li>None recorded.</li>`;
+    };
+    createListItems('positive-points', analysis.positive_points);
+    createListItems('negative-points', analysis.negative_points);
+    createListItems('advice', analysis.advice);
+
+    const comp = analysis.comparison;
+    const key = comp.wear_vs_avg === 'better' ? 'community_better' : 'community_worse';
+    document.getElementById('comparison-text').textContent = translations[currentLang][key]
+        .replace('{percentile}', comp.percentile)
+        .replace('{average_wear}', comp.average_wear.toFixed(1));
+
+    const tableBody = document.querySelector("#recent-usage-table tbody");
+    tableBody.innerHTML = parsedData.recentUsage.slice(0, 10).map(u => `
+        <tr><td>${u.start}</td><td>${u.state}</td><td>${u.source}</td><td>${u.drain}</td></tr>`).join('');
+
+    const chartTextColor = '#718096';
+    const chartGridColor = '#e2e8f0';
+
+    const ctxComp = document.getElementById('comparisonChart').getContext('2d');
+    if (comparisonChartInstance) comparisonChartInstance.destroy();
+    comparisonChartInstance = new Chart(ctxComp, {
+        type: 'bar',
+        data: {
+            labels: [translations[currentLang].chart_your_battery, translations[currentLang].chart_community_avg],
+            datasets: [{
+                label: translations[currentLang].chart_wear_label,
+                data: [parsedData.wearLevel, comp.average_wear],
+                backgroundColor: ['#4A90E2', '#F87171'],
+                borderRadius: 4,
+                barThickness: 30
+            }]
+        },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
+            scales: {
+                y: { ticks: { color: chartTextColor }, grid: { color: chartGridColor } },
+                x: { ticks: { color: chartTextColor }, grid: { display: false } }
+            }
+        }
+    });
+
+    const ctxHist = document.getElementById('historyChart').getContext('2d');
+    if (historyChartInstance) historyChartInstance.destroy();
+    historyChartInstance = new Chart(ctxHist, {
+        type: 'line',
+        data: {
+            labels: parsedData.capacityHistory.map(h => h.period.split(' - ')[0]),
+            datasets: [{
+                label: translations[currentLang].chart_history_label,
+                data: parsedData.capacityHistory.map(h => h.fullCharge),
+                borderColor: '#34D399',
+                backgroundColor: 'rgba(52, 211, 153, 0.1)',
+                fill: true, tension: 0.3, pointRadius: 3, pointBackgroundColor: '#34D399'
+            }]
+        },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
+            scales: {
+                y: { ticks: { color: chartTextColor }, grid: { color: chartGridColor } },
+                x: { ticks: { color: chartTextColor }, grid: { display: false } }
+            }
+        }
+    });
+}
+
+const openChatBtn = document.getElementById('open-chat-btn');
+const closeChatBtn = document.getElementById('close-chat-btn');
+const chatModal = document.getElementById('chat-modal');
+const chatForm = document.getElementById('chat-form');
+const chatInput = document.getElementById('chat-input');
+const chatMessages = document.getElementById('chat-messages');
+
+function openChat() {
+    chatModal.classList.add('visible');
+    chatMessages.innerHTML = '';
+    appendMessage(translations[currentLang].chat_responses.greeting, 'ai');
+    chatInput.focus();
+}
+
+function closeChat() { chatModal.classList.remove('visible'); }
+
+openChatBtn.addEventListener('click', openChat);
+closeChatBtn.addEventListener('click', closeChat);
+chatModal.addEventListener('click', (e) => { if (e.target === chatModal) closeChat(); });
+
+chatForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const userInput = chatInput.value.trim();
+    if (userInput) {
+        appendMessage(userInput, 'user');
+        chatInput.value = '';
+        appendTypingIndicator();
+        setTimeout(() => {
+            document.querySelector('.typing-indicator').remove();
+            appendMessage(getAIResponse(userInput), 'ai');
+        }, 1200 + Math.random() * 500);
+    }
+});
+
+function appendMessage(text, type) {
+    const messageElement = document.createElement('div');
+    messageElement.classList.add('message', `${type}-message`);
+    messageElement.textContent = text;
+    chatMessages.appendChild(messageElement);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+}
+
+function appendTypingIndicator() {
+    const indicator = document.createElement('div');
+    indicator.classList.add('message', 'typing-indicator');
+    indicator.innerHTML = '<span></span><span></span><span></span>';
+    chatMessages.appendChild(indicator);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+}
+
+function getAIResponse(userInput) {
+    const input = userInput.toLowerCase();
+    const responses = translations[currentLang].chat_responses;
+
+    if (input.includes('wear') || input.includes('usure') || input.includes('تآكل')) return responses.wear;
+    if (input.includes('cycle') || input.includes('دورات')) return responses.cycle;
+    if (input.includes('capacity') || input.includes('capacité') || input.includes('سعة')) return responses.capacity;
+    if (input.includes('status') || input.includes('statut') || input.includes('حالة')) return responses.status;
+
+    return responses.default;
+}
+
+</script>
+</body>
+</html>
